@@ -1,3 +1,4 @@
+import torch
 import copy
 import json
 from abc import ABCMeta, abstractmethod
@@ -365,6 +366,7 @@ class LearnableBase:
             Dict[str, Callable[[Any, List[Episode]], float]]
         ] = None,
         shuffle: bool = True,
+        env: Optional[gym.Env] = None,
         callback: Optional[Callable[["LearnableBase", int, int], None]] = None,
     ) -> List[Tuple[int, Dict[str, float]]]:
         """Trains with the given dataset.
@@ -420,6 +422,7 @@ class LearnableBase:
                 save_interval,
                 scorers,
                 shuffle,
+                env,
                 callback,
             )
         )
@@ -444,6 +447,7 @@ class LearnableBase:
             Dict[str, Callable[[Any, List[Episode]], float]]
         ] = None,
         shuffle: bool = True,
+        env: Optional[gym.Env] = None,
         callback: Optional[Callable[["LearnableBase", int, int], None]] = None,
     ) -> Generator[Tuple[int, Dict[str, float]], None, None]:
         """Iterate over epochs steps to train with the given dataset. At each
@@ -490,6 +494,7 @@ class LearnableBase:
         if isinstance(dataset, MDPDataset):
             for episode in dataset.episodes:
                 transitions += episode.transitions
+
         elif not dataset:
             raise ValueError("empty dataset is not supported.")
         elif isinstance(dataset[0], Episode):
@@ -499,7 +504,6 @@ class LearnableBase:
             transitions = list(cast(List[Transition], dataset))
         else:
             raise ValueError(f"invalid dataset type: {type(dataset)}")
-
         # check action space
         if self.get_action_type() == ActionSpace.BOTH:
             pass
@@ -599,9 +603,13 @@ class LearnableBase:
         self._loss_history = defaultdict(list)
 
         # training loop
+        if env:
+            obs = env.reset()
+            prev_transition = None
         total_step = 0
+        rollout_return = 0
         for epoch in range(1, n_epochs + 1):
-
+            print(len(iterator._transitions))
             # dict to add incremental mean losses to epoch
             epoch_loss = defaultdict(list)
 
@@ -612,7 +620,7 @@ class LearnableBase:
             )
 
             iterator.reset()
-
+            # import pdb;pdb.set_trace()
             for itr in range_gen:
 
                 # generate new transitions with dynamics models
@@ -626,6 +634,49 @@ class LearnableBase:
                         real_transitions=len(iterator.transitions),
                         fake_transitions=len(iterator.generated_transitions),
                     )
+
+                if env:
+                    # step environment
+                    with torch.no_grad():
+                        act = self._impl._policy(torch.from_numpy(obs).float().unsqueeze(0).to('cuda:0'))
+                        act = act[0].to('cpu').detach().numpy()
+                        # transform action back to the original range
+                        # if self._action_scaler:
+                        #     act = self._action_scaler.reverse_transform(act)
+
+                    next_observation, reward, terminal, info = env.step(act)
+                    rollout_return += reward
+                    # special case for TimeLimit wrapper
+                    clip_episode = terminal
+                    # store observation
+
+                    # import pdb;pdb.set_trace()
+                    transition = Transition(
+                        observation_shape=iterator._transitions[0].get_observation_shape(),
+                        action_size=iterator._transitions[0].get_action_size(),
+                        observation=obs,
+                        action=act,
+                        reward=reward,
+                        next_observation=next_observation,
+                        terminal=terminal,
+                        prev_transition=prev_transition
+                    )
+                    iterator._transitions.append(transition)
+                    # set pointer to the next transition
+                    if prev_transition:
+                        prev_transition.next_transition = transition
+
+                    prev_transition = transition
+
+                    # reset if terminated
+                    if clip_episode:
+                        obs = env.reset()
+                        logger.add_metric("rollout_return", rollout_return)
+                        rollout_return = 0.0
+                        prev_transition = None
+                    else:
+                        obs = next_observation
+
 
                 with logger.measure_time("step"):
                     # pick transitions
@@ -735,7 +786,7 @@ class LearnableBase:
             observation_shape = (self._n_frames * n_channels, *image_size)
         return observation_shape
 
-    def update(self, batch: TransitionMiniBatch) -> Dict[str, float]:
+    def update(self, batch: TransitionMiniBatch,demo_batch=None,utd=1) -> Dict[str, float]:
         """Update parameters with mini-batch of data.
 
         Args:
@@ -745,7 +796,10 @@ class LearnableBase:
             dictionary of metrics.
 
         """
-        loss = self._update(batch)
+        if demo_batch:
+            loss = self._update(batch,demo_batch)
+        else:
+            loss = self._update(batch,utd=utd)
         self._grad_step += 1
         return loss
 

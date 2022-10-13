@@ -139,6 +139,8 @@ class SAC(AlgoBase):
         action_scaler: ActionScalerArg = None,
         reward_scaler: RewardScalerArg = None,
         impl: Optional[SACImpl] = None,
+        dropout=0.0,
+        layernorm=False,
         **kwargs: Any
     ):
         super().__init__(
@@ -165,6 +167,8 @@ class SAC(AlgoBase):
         self._initial_temperature = initial_temperature
         self._use_gpu = check_use_gpu(use_gpu)
         self._impl = impl
+        self.dropout = dropout
+        self.layernorm = layernorm
 
     def _create_impl(
         self, observation_shape: Sequence[int], action_size: int
@@ -189,23 +193,30 @@ class SAC(AlgoBase):
             scaler=self._scaler,
             action_scaler=self._action_scaler,
             reward_scaler=self._reward_scaler,
+            dropout = self.dropout,
+            layernorm = self.layernorm,
         )
         self._impl.build()
 
-    def _update(self, batch: TransitionMiniBatch) -> Dict[str, float]:
+    def _update(self, batch: TransitionMiniBatch, demo_batch=None,utd=1) -> Dict[str, float]:
         assert self._impl is not None, IMPL_NOT_INITIALIZED_ERROR
-
         metrics = {}
 
         # lagrangian parameter update for SAC temperature
         if self._temp_learning_rate > 0:
             temp_loss, temp = self._impl.update_temp(batch)
             metrics.update({"temp_loss": temp_loss, "temp": temp})
-
-        critic_loss = self._impl.update_critic(batch)
+        if utd > 1:
+            for _ in range(utd):
+                critic_loss = self._impl.update_critic(batch)
+        else:
+            critic_loss = self._impl.update_critic(batch)
         metrics.update({"critic_loss": critic_loss})
 
-        actor_loss = self._impl.update_actor(batch)
+        if demo_batch:
+            actor_loss = self._impl.update_actor(batch,demo_batch)
+        else:
+            actor_loss = self._impl.update_actor(batch)
         metrics.update({"actor_loss": actor_loss})
 
         self._impl.update_critic_target()

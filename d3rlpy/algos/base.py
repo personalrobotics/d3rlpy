@@ -206,6 +206,11 @@ class AlgoBase(LearnableBase):
         tensorboard_dir: Optional[str] = None,
         timelimit_aware: bool = True,
         callback: Optional[Callable[[AlgoProtocol, int, int], None]] = None,
+        load_demo=None,
+        bc_loss=False,
+        utd=1,
+        dropout=0.0,
+        layernorm=False,
     ) -> None:
         """Start training loop of online deep reinforcement learning.
 
@@ -238,6 +243,7 @@ class AlgoBase(LearnableBase):
                 incorporate with ``gym.wrappers.TimeLimit``.
             callback: callable function that takes ``(algo, epoch, total_step)``
                 , which is called at the end of epochs.
+            load_demo: demo trajectory path
 
         """
 
@@ -270,6 +276,11 @@ class AlgoBase(LearnableBase):
             tensorboard_dir=tensorboard_dir,
             timelimit_aware=timelimit_aware,
             callback=callback,
+            load_demo=load_demo,
+            bc_loss=bc_loss,
+            utd=utd,
+            dropout=dropout,
+            layernorm=layernorm,
         )
 
     def collect(

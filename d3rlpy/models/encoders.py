@@ -188,14 +188,17 @@ class VectorEncoderFactory(EncoderFactory):
     _use_batch_norm: bool
     _dropout_rate: Optional[float]
     _use_dense: bool
+    _use_layernorm : bool
 
     def __init__(
         self,
         hidden_units: Optional[Sequence[int]] = None,
         activation: str = "relu",
         use_batch_norm: bool = False,
-        dropout_rate: Optional[float] = None,
+
         use_dense: bool = False,
+        use_layernorm: bool = False,
+        dropout_rate: Optional[float] = None,
     ):
         if hidden_units is None:
             self._hidden_units = [256, 256]
@@ -205,15 +208,18 @@ class VectorEncoderFactory(EncoderFactory):
         self._use_batch_norm = use_batch_norm
         self._dropout_rate = dropout_rate
         self._use_dense = use_dense
+        self._use_layernorm = use_layernorm
 
     def create(self, observation_shape: Sequence[int]) -> VectorEncoder:
         assert len(observation_shape) == 1
+        print(self._use_layernorm,self._dropout_rate)
         return VectorEncoder(
             observation_shape=observation_shape,
             hidden_units=self._hidden_units,
             use_batch_norm=self._use_batch_norm,
             dropout_rate=self._dropout_rate,
             use_dense=self._use_dense,
+            use_layernorm = self._use_layernorm,
             activation=_create_activation(self._activation),
         )
 
@@ -223,6 +229,8 @@ class VectorEncoderFactory(EncoderFactory):
         action_size: int,
         discrete_action: bool = False,
     ) -> VectorEncoderWithAction:
+        print(self._use_layernorm,self._dropout_rate)
+
         assert len(observation_shape) == 1
         return VectorEncoderWithAction(
             observation_shape=observation_shape,
@@ -230,6 +238,7 @@ class VectorEncoderFactory(EncoderFactory):
             hidden_units=self._hidden_units,
             use_batch_norm=self._use_batch_norm,
             dropout_rate=self._dropout_rate,
+            use_layernorm = self._use_layernorm,
             use_dense=self._use_dense,
             discrete_action=discrete_action,
             activation=_create_activation(self._activation),
@@ -265,17 +274,21 @@ class DefaultEncoderFactory(EncoderFactory):
     TYPE: ClassVar[str] = "default"
     _activation: str
     _use_batch_norm: bool
+    _use_layernorm: bool
     _dropout_rate: Optional[float]
 
     def __init__(
         self,
         activation: str = "relu",
         use_batch_norm: bool = False,
+        use_layernorm:bool = False,
         dropout_rate: Optional[float] = None,
+
     ):
         self._activation = activation
         self._use_batch_norm = use_batch_norm
         self._dropout_rate = dropout_rate
+        self._use_layernorm = use_layernorm
 
     def create(self, observation_shape: Sequence[int]) -> Encoder:
         factory: Union[PixelEncoderFactory, VectorEncoderFactory]
@@ -290,6 +303,7 @@ class DefaultEncoderFactory(EncoderFactory):
                 activation=self._activation,
                 use_batch_norm=self._use_batch_norm,
                 dropout_rate=self._dropout_rate,
+                use_layernorm=self._use_layernorm,
             )
         return factory.create(observation_shape)
 
@@ -311,6 +325,7 @@ class DefaultEncoderFactory(EncoderFactory):
                 activation=self._activation,
                 use_batch_norm=self._use_batch_norm,
                 dropout_rate=self._dropout_rate,
+                use_layernorm=self._use_layernorm,
             )
         return factory.create_with_action(
             observation_shape, action_size, discrete_action

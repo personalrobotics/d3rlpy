@@ -219,7 +219,8 @@ class MinMaxScaler(Scaler):
         maximum = torch.tensor(
             self._maximum, dtype=torch.float32, device=x.device
         )
-        return (x - minimum) / (maximum - minimum)
+        import pdb;pdb.set_trace()
+        return (x - minimum) / (maximum - minimum + 1e-8)
 
     def reverse_transform(self, x: torch.Tensor) -> torch.Tensor:
         assert self._minimum is not None and self._maximum is not None
@@ -229,7 +230,7 @@ class MinMaxScaler(Scaler):
         maximum = torch.tensor(
             self._maximum, dtype=torch.float32, device=x.device
         )
-        return ((maximum - minimum) * x) + minimum
+        return ((maximum - minimum + 1e-8) * x) + minimum
 
     def get_params(self, deep: bool = False) -> Dict[str, Any]:
         if self._maximum is not None:

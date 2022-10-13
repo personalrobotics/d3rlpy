@@ -401,7 +401,16 @@ def discrete_action_match_scorer(
             total_matches += match
     return float(np.mean(total_matches))
 
-
+def unscale_action(action_space, scaled_action):
+    """
+    Rescale the action from [-1, 1] to [low, high]
+    (no need for symmetric action space)
+    :param action_space: (gym.spaces.box.Box)
+    :param action: (np.ndarray)
+    :return: (np.ndarray)
+    """
+    low, high = action_space.low, action_space.high
+    return low + (0.5 * (scaled_action + 1.0) * (high - low + 1e-8))
 def evaluate_on_environment(
     env: gym.Env, n_trials: int = 10, epsilon: float = 0.0, render: bool = False
 ) -> Callable[..., float]:
@@ -470,7 +479,7 @@ def evaluate_on_environment(
                         action = algo.predict([stacked_observation.eval()])[0]
                     else:
                         action = algo.predict([observation])[0]
-
+                action = unscale_action(env.action_space, action)
                 observation, reward, done, _ = env.step(action)
                 episode_reward += reward
 

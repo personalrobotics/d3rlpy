@@ -64,6 +64,8 @@ class DDPGBaseImpl(ContinuousQFunctionMixin, TorchImplBase, metaclass=ABCMeta):
         scaler: Optional[Scaler],
         action_scaler: Optional[ActionScaler],
         reward_scaler: Optional[RewardScaler],
+        dropout : bool,
+        layernorm : bool,
     ):
         super().__init__(
             observation_shape=observation_shape,
@@ -91,6 +93,8 @@ class DDPGBaseImpl(ContinuousQFunctionMixin, TorchImplBase, metaclass=ABCMeta):
         self._targ_policy = None
         self._actor_optim = None
         self._critic_optim = None
+        self.dropout = dropout
+        self.layernorm = layernorm
 
     def build(self) -> None:
         # setup torch models
@@ -117,6 +121,8 @@ class DDPGBaseImpl(ContinuousQFunctionMixin, TorchImplBase, metaclass=ABCMeta):
             self._critic_encoder_factory,
             self._q_func_factory,
             n_ensembles=self._n_critics,
+            dropout = self.dropout,
+            layernorm = self.layernorm,
         )
 
     def _build_critic_optim(self) -> None:
@@ -143,7 +149,6 @@ class DDPGBaseImpl(ContinuousQFunctionMixin, TorchImplBase, metaclass=ABCMeta):
         self._critic_optim.zero_grad()
 
         q_tpn = self.compute_target(batch)
-
         loss = self.compute_critic_loss(batch, q_tpn)
 
         loss.backward()
@@ -166,7 +171,7 @@ class DDPGBaseImpl(ContinuousQFunctionMixin, TorchImplBase, metaclass=ABCMeta):
 
     @train_api
     @torch_api()
-    def update_actor(self, batch: TorchMiniBatch) -> np.ndarray:
+    def update_actor(self, batch: TorchMiniBatch,demo_batch=None) -> np.ndarray:
         assert self._q_func is not None
         assert self._actor_optim is not None
 
@@ -174,8 +179,10 @@ class DDPGBaseImpl(ContinuousQFunctionMixin, TorchImplBase, metaclass=ABCMeta):
         self._q_func.eval()
 
         self._actor_optim.zero_grad()
-
-        loss = self.compute_actor_loss(batch)
+        if demo_batch:
+            loss = self.compute_actor_loss(batch,demo_batch)
+        else:
+            loss = self.compute_actor_loss(batch)
 
         loss.backward()
         self._actor_optim.step()

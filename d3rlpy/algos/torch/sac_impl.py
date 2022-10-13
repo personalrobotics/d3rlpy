@@ -62,6 +62,8 @@ class SACImpl(DDPGBaseImpl):
         scaler: Optional[Scaler],
         action_scaler: Optional[ActionScaler],
         reward_scaler: Optional[RewardScaler],
+        dropout = bool,
+        layernorm = bool,
     ):
         super().__init__(
             observation_shape=observation_shape,
@@ -80,6 +82,8 @@ class SACImpl(DDPGBaseImpl):
             scaler=scaler,
             action_scaler=action_scaler,
             reward_scaler=reward_scaler,
+            dropout = dropout,
+            layernorm = layernorm,
         )
         self._temp_learning_rate = temp_learning_rate
         self._temp_optim_factory = temp_optim_factory
@@ -88,6 +92,7 @@ class SACImpl(DDPGBaseImpl):
         # initialized in build
         self._log_temp = None
         self._temp_optim = None
+        # self.mse = torch.nn.MSELoss()
 
     def build(self) -> None:
         self._build_temperature()
@@ -104,21 +109,27 @@ class SACImpl(DDPGBaseImpl):
     def _build_temperature(self) -> None:
         initial_val = math.log(self._initial_temperature)
         self._log_temp = create_parameter((1, 1), initial_val)
-
     def _build_temperature_optim(self) -> None:
         assert self._log_temp is not None
         self._temp_optim = self._temp_optim_factory.create(
             self._log_temp.parameters(), lr=self._temp_learning_rate
         )
 
-    def compute_actor_loss(self, batch: TorchMiniBatch) -> torch.Tensor:
+    def compute_actor_loss(self, batch: TorchMiniBatch,demo_batch=None) -> torch.Tensor:
         assert self._policy is not None
         assert self._log_temp is not None
         assert self._q_func is not None
         action, log_prob = self._policy.sample_with_log_prob(batch.observations)
         entropy = self._log_temp().exp() * log_prob
         q_t = self._q_func(batch.observations, action, "min")
-        return (entropy - q_t).mean()
+        if demo_batch:
+            # import pdb;pdb.set_trace()
+            bc_action = self._policy.best_action(demo_batch.observations)
+            bc_loss = 1.9*self.mse(bc_action[:,:3], demo_batch.actions[:,:3]) \
+        + 0.01*self.mse(bc_action[:,3:7], demo_batch.actions[:,3:7]) + 2.2*self.mse(bc_action[:,-1], demo_batch.actions[:,-1])
+            return (entropy - q_t).mean() + 0.5*bc_loss
+        else:
+            return (entropy - q_t).mean()
 
     @train_api
     @torch_api()
@@ -342,14 +353,12 @@ class DiscreteSACImpl(DiscreteQFunctionMixin, TorchImplBase):
     def update_actor(self, batch: TorchMiniBatch) -> np.ndarray:
         assert self._q_func is not None
         assert self._actor_optim is not None
-
         # Q function should be inference mode for stability
         self._q_func.eval()
 
         self._actor_optim.zero_grad()
 
         loss = self.compute_actor_loss(batch)
-
         loss.backward()
         self._actor_optim.step()
 
