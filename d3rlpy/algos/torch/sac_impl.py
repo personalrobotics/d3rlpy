@@ -62,7 +62,7 @@ class SACImpl(DDPGBaseImpl):
         scaler: Optional[Scaler],
         action_scaler: Optional[ActionScaler],
         reward_scaler: Optional[RewardScaler],
-        dropout = bool,
+        dropout = float,
         layernorm = bool,
     ):
         super().__init__(
