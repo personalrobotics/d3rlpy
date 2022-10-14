@@ -10,7 +10,7 @@ from ..logger import LOG, D3RLPyLogger
 from ..metrics.scorer import evaluate_on_environment
 from ..preprocessing import ActionScaler, Scaler
 from ..preprocessing.stack import StackedObservation
-from .buffers import Buffer
+from .buffers import Buffer,ReplayBuffer
 from .explorers import Explorer
 
 
@@ -72,7 +72,29 @@ class AlgoProtocol(Protocol):
     def grad_step(self) -> int:
         ...
 
+def scale_action(action_space, action):
+    """
+    Rescale the action from [low, high] to [-1, 1]
+    (no need for symmetric action space)
+    :param action_space: (gym.spaces.box.Box)
+    :param action: (np.ndarray)
+    :return: (np.ndarray)
+    """
+    action = np.clip(action, action_space.low, action_space.high)
+    low, high = action_space.low, action_space.high
+    return 2.0 * ((action - low) / (high - low + 1e-8)) - 1.0
 
+
+def unscale_action(action_space, scaled_action):
+    """
+    Rescale the action from [-1, 1] to [low, high]
+    (no need for symmetric action space)
+    :param action_space: (gym.spaces.box.Box)
+    :param action: (np.ndarray)
+    :return: (np.ndarray)
+    """
+    low, high = action_space.low, action_space.high
+    return low + (0.5 * (scaled_action + 1.0) * (high - low + 1e-8))
 def _setup_algo(algo: AlgoProtocol, env: gym.Env) -> None:
     # initialize scaler
     if algo.scaler:
@@ -118,6 +140,11 @@ def train_single_env(
     tensorboard_dir: Optional[str] = None,
     timelimit_aware: bool = True,
     callback: Optional[Callable[[AlgoProtocol, int, int], None]] = None,
+    load_demo=None,
+    bc_loss=False,
+    utd=1,
+    dropout=0.0,
+    layernorm=False,
 ) -> None:
     """Start training loop of online deep reinforcement learning.
 
@@ -189,7 +216,64 @@ def train_single_env(
         eval_scorer = evaluate_on_environment(eval_env, epsilon=eval_epsilon)
     else:
         eval_scorer = None
+    # load demo
+    if load_demo is not None:
 
+        demos = np.load(load_demo,allow_pickle=True)
+        if bc_loss:
+            print("demo buffer created")
+            demo_buffer = ReplayBuffer(1000000, env=env)
+
+            for demo in demos:
+                demo_steps = len(demo['obs'])
+                for i in range(demo_steps):
+                    demo_buffer.append(
+                        observation=demo['obs'][i],
+                        action=scale_action(env.action_space, demo['act'][i]),
+                        reward=demo['rew'][i],
+                        terminal=demo['done'][i],
+                        clip_episode=demo['done'][i],
+                    )
+        else:
+            for demo in demos:
+                demo_steps = len(demo['obs'])
+                for i in range(demo_steps):
+                    buffer.append(
+                        observation=demo['obs'][i],
+                        action=scale_action(env.action_space, demo['act'][i]),
+                        reward=demo['rew'][i],
+                        terminal=demo['done'][i],
+                        clip_episode=demo['done'][i],
+                    )
+
+
+        # import pickle
+        # raw_dataset = pickle.load(open(load_demo, 'rb'))
+        # import pdb;pdb.set_trace()
+        # demo_num = len(raw_dataset)
+
+        # for i in range(demo_num):
+        #   horizon = min(100,raw_dataset[i]['observations'].shape[0])
+        #   for j in range(horizon):
+
+        #       if j == horizon - 1:
+        #           terminals = True
+        #           episode_terminals = True
+        #       else:
+        #           terminals = False
+        #           episode_terminals = False
+
+        #       buffer.append(
+        #           observation=np.array(raw_dataset[i]['observations'][j][:11],dtype=np.float32),
+        #           action=np.array(scale_action(env.action_space, raw_dataset[i]['actions'][j]),dtype=np.float32),
+        #           reward=np.array(raw_dataset[i]['rewards'][j],dtype=np.float32),
+        #           terminal=np.array(terminals,dtype=np.float32),
+        #           clip_episode=np.array(episode_terminals,dtype=np.float32),
+        #       )
+
+
+
+        print("demo loaded")
     # start training loop
     observation = env.reset()
     rollout_return = 0.0
@@ -205,26 +289,37 @@ def train_single_env(
 
             # sample exploration action
             with logger.measure_time("inference"):
+
                 if total_step < random_steps:
-                    action = env.action_space.sample()
+                    # import pdb;pdb.set_trace()
+                    # actions sampled from action space are from range specific to the environment
+                    # but algorithm operates on tanh-squashed actions therefore simple scaling is used
+                    unscaled_action = env.action_space.sample()
+                    action = scale_action(env.action_space, unscaled_action)
+
                 elif explorer:
                     x = fed_observation.reshape((1,) + fed_observation.shape)
                     action = explorer.sample(algo, x, total_step)[0]
                 else:
+                    # import pdb;pdb.set_trace()
                     action = algo.sample_action([fed_observation])[0]
+                    # # Add noise to the action (improve exploration,
+                    # # not needed in general)
+                    # if self.action_noise is not None:
+                    #     action = np.clip(action + self.action_noise(), -1, 1)
+                    # inferred actions need to be transformed to environment action_space before stepping
+                    unscaled_action = unscale_action(env.action_space, action)
 
             # step environment
             with logger.measure_time("environment_step"):
-                next_observation, reward, terminal, info = env.step(action)
+                next_observation, reward, terminal, info = env.step(unscaled_action)
                 rollout_return += reward
-
             # special case for TimeLimit wrapper
             if timelimit_aware and "TimeLimit.truncated" in info:
                 clip_episode = True
                 terminal = False
             else:
                 clip_episode = terminal
-
             # store observation
             buffer.append(
                 observation=observation,
@@ -247,21 +342,47 @@ def train_single_env(
 
             # psuedo epoch count
             epoch = total_step // n_steps_per_epoch
-
             if total_step > update_start_step and len(buffer) > algo.batch_size:
                 if total_step % update_interval == 0:
                     # sample mini-batch
                     with logger.measure_time("sample_batch"):
-                        batch = buffer.sample(
-                            batch_size=algo.batch_size,
-                            n_frames=algo.n_frames,
-                            n_steps=algo.n_steps,
-                            gamma=algo.gamma,
-                        )
-
+                        demo_batch = None
+                        if bc_loss:
+                            buffer_t = buffer.sample_trainsitions(
+                                batch_size=algo.batch_size,
+                                n_frames=algo.n_frames,
+                                n_steps=algo.n_steps,
+                                gamma=algo.gamma,
+                            )
+                            demo_t = demo_buffer.sample_trainsitions(
+                                batch_size=128,
+                                n_frames=algo.n_frames,
+                                n_steps=algo.n_steps,
+                                gamma=algo.gamma,
+                            )
+                            batch = buffer.to_minibatch(
+                                buffer_t+demo_t,
+                                n_frames=algo.n_frames,
+                                n_steps=algo.n_steps,
+                                gamma=algo.gamma,
+                            )
+                            demo_batch = demo_buffer.to_minibatch(
+                                demo_t,
+                                n_frames=algo.n_frames,
+                                n_steps=algo.n_steps,
+                                gamma=algo.gamma,
+                            )
+                        else:
+                            batch = buffer.sample(
+                                batch_size=algo.batch_size,
+                                n_frames=algo.n_frames,
+                                n_steps=algo.n_steps,
+                                gamma=algo.gamma,
+                            )
                     # update parameters
                     with logger.measure_time("algorithm_update"):
-                        loss = algo.update(batch)
+                        for _ in range(1):
+                            loss = algo.update(batch,demo_batch=demo_batch,utd=utd)
 
                     # record metrics
                     for name, val in loss.items():

@@ -219,8 +219,25 @@ class BasicSampleMixin:
         transitions = [self._transitions[index] for index in indices]
         batch = TransitionMiniBatch(transitions, n_frames, n_steps, gamma)
         return batch
-
-
+    def sample_trainsitions(
+        self,
+        batch_size: int,
+        n_frames: int = 1,
+        n_steps: int = 1,
+        gamma: float = 0.99,
+    ) -> TransitionMiniBatch:
+        indices = np.random.choice(len(self._transitions), batch_size)
+        transitions = [self._transitions[index] for index in indices]
+        return transitions
+    def to_minibatch(
+        self,
+        transitions: FIFOQueue[Transition],
+        n_frames: int = 1,
+        n_steps: int = 1,
+        gamma: float = 0.99,
+    ) -> TransitionMiniBatch:
+        batch = TransitionMiniBatch(transitions, n_frames, n_steps, gamma)
+        return batch
 class ReplayBuffer(BasicSampleMixin, Buffer):
     """Standard Replay Buffer.
 

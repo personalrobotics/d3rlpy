@@ -64,6 +64,8 @@ class IQLImpl(DDPGBaseImpl):
             scaler=scaler,
             action_scaler=action_scaler,
             reward_scaler=reward_scaler,
+            dropout=False,
+            layernorm=False,
         )
         self._expectile = expectile
         self._weight_temp = weight_temp

@@ -187,7 +187,6 @@ class IQL(AlgoBase):
         assert self._impl is not None, IMPL_NOT_INITIALIZED_ERROR
 
         metrics = {}
-
         critic_loss, value_loss = self._impl.update_critic(batch)
         metrics.update({"critic_loss": critic_loss, "value_loss": value_loss})
 
