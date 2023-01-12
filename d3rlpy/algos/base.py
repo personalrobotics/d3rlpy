@@ -206,11 +206,10 @@ class AlgoBase(LearnableBase):
         tensorboard_dir: Optional[str] = None,
         timelimit_aware: bool = True,
         callback: Optional[Callable[[AlgoProtocol, int, int], None]] = None,
-        load_demo=None,
-        bc_loss=False,
         utd=1,
         dropout=0.0,
         layernorm=False,
+        reset_tmp=False,
     ) -> None:
         """Start training loop of online deep reinforcement learning.
 
@@ -276,11 +275,10 @@ class AlgoBase(LearnableBase):
             tensorboard_dir=tensorboard_dir,
             timelimit_aware=timelimit_aware,
             callback=callback,
-            load_demo=load_demo,
-            bc_loss=bc_loss,
             utd=utd,
             dropout=dropout,
             layernorm=layernorm,
+            reset_tmp=reset_tmp,
         )
 
     def collect(

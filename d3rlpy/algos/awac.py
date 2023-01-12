@@ -170,10 +170,11 @@ class AWAC(AlgoBase):
             scaler=self._scaler,
             action_scaler=self._action_scaler,
             reward_scaler=self._reward_scaler,
+            dropout = 0.0,
         )
         self._impl.build()
 
-    def _update(self, batch: TransitionMiniBatch) -> Dict[str, float]:
+    def _update(self, batch: TransitionMiniBatch,utd=1) -> Dict[str, float]:
         assert self._impl is not None, IMPL_NOT_INITIALIZED_ERROR
 
         metrics = {}

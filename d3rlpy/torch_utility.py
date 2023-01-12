@@ -103,11 +103,19 @@ def get_state_dict(impl: Any) -> Dict[str, Any]:
     return rets
 
 
-def set_state_dict(impl: Any, chkpt: Dict[str, Any]) -> None:
+def set_state_dict(impl: Any, chkpt: Dict[str, Any],aq_only = False) -> None:
     for key in _get_attributes(impl):
         obj = getattr(impl, key)
         if isinstance(obj, (torch.nn.Module, torch.optim.Optimizer)):
-            obj.load_state_dict(chkpt[key])
+            if aq_only:
+                if 'policy' in key or 'actor' in key or 'q_func' in key:
+                    print(key)
+                    obj.load_state_dict(chkpt[key])
+                # if  'q_func' in key:
+                #     print(key)
+                #     obj.load_state_dict(chkpt[key])
+            else:
+                obj.load_state_dict(chkpt[key])
 
 
 def reset_optimizer_states(impl: Any) -> None:

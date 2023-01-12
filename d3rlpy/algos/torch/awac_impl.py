@@ -41,6 +41,7 @@ class AWACImpl(SACImpl):
         scaler: Optional[Scaler],
         action_scaler: Optional[ActionScaler],
         reward_scaler: Optional[RewardScaler],
+        dropout:Optional[float],
     ):
         super().__init__(
             observation_shape=observation_shape,
@@ -62,6 +63,7 @@ class AWACImpl(SACImpl):
             scaler=scaler,
             action_scaler=action_scaler,
             reward_scaler=reward_scaler,
+            dropout=0.0
         )
         self._lam = lam
         self._n_action_samples = n_action_samples

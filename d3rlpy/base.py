@@ -62,7 +62,7 @@ class ImplBase(metaclass=ABCMeta):
         pass
 
     @abstractmethod
-    def load_model(self, fname: str) -> None:
+    def load_model(self, fname: str,aq_only=False) -> None:
         pass
 
     @property
@@ -333,7 +333,7 @@ class LearnableBase:
         assert self._impl is not None, IMPL_NOT_INITIALIZED_ERROR
         self._impl.save_model(fname)
 
-    def load_model(self, fname: str) -> None:
+    def load_model(self, fname: str,aq_only=False) -> None:
         """Load neural network parameters.
 
         .. code-block:: python
@@ -345,7 +345,7 @@ class LearnableBase:
 
         """
         assert self._impl is not None, IMPL_NOT_INITIALIZED_ERROR
-        self._impl.load_model(fname)
+        self._impl.load_model(fname,aq_only=aq_only)
 
     def fit(
         self,
@@ -671,7 +671,7 @@ class LearnableBase:
                     # reset if terminated
                     if clip_episode:
                         obs = env.reset()
-                        logger.add_metric("rollout_return", rollout_return)
+                        logger.add_metric("train_rollout_return", rollout_return)
                         rollout_return = 0.0
                         prev_transition = None
                     else:

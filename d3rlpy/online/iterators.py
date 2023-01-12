@@ -12,7 +12,7 @@ from ..preprocessing import ActionScaler, Scaler
 from ..preprocessing.stack import StackedObservation
 from .buffers import Buffer,ReplayBuffer
 from .explorers import Explorer
-
+from d3rlpy.torch_utility import _convert_to_torch
 
 class AlgoProtocol(Protocol):
     def update(self, batch: TransitionMiniBatch) -> Dict[str, float]:
@@ -140,11 +140,11 @@ def train_single_env(
     tensorboard_dir: Optional[str] = None,
     timelimit_aware: bool = True,
     callback: Optional[Callable[[AlgoProtocol, int, int], None]] = None,
-    load_demo=None,
     bc_loss=False,
     utd=1,
     dropout=0.0,
     layernorm=False,
+    reset_tmp=False,
 ) -> None:
     """Start training loop of online deep reinforcement learning.
 
@@ -216,68 +216,16 @@ def train_single_env(
         eval_scorer = evaluate_on_environment(eval_env, epsilon=eval_epsilon)
     else:
         eval_scorer = None
-    # load demo
-    if load_demo is not None:
 
-        demos = np.load(load_demo,allow_pickle=True)
-        if bc_loss:
-            print("demo buffer created")
-            demo_buffer = ReplayBuffer(1000000, env=env)
-
-            for demo in demos:
-                demo_steps = len(demo['obs'])
-                for i in range(demo_steps):
-                    demo_buffer.append(
-                        observation=demo['obs'][i],
-                        action=scale_action(env.action_space, demo['act'][i]),
-                        reward=demo['rew'][i],
-                        terminal=demo['done'][i],
-                        clip_episode=demo['done'][i],
-                    )
-        else:
-            for demo in demos:
-                demo_steps = len(demo['obs'])
-                for i in range(demo_steps):
-                    buffer.append(
-                        observation=demo['obs'][i],
-                        action=scale_action(env.action_space, demo['act'][i]),
-                        reward=demo['rew'][i],
-                        terminal=demo['done'][i],
-                        clip_episode=demo['done'][i],
-                    )
-
-
-        # import pickle
-        # raw_dataset = pickle.load(open(load_demo, 'rb'))
-        # import pdb;pdb.set_trace()
-        # demo_num = len(raw_dataset)
-
-        # for i in range(demo_num):
-        #   horizon = min(100,raw_dataset[i]['observations'].shape[0])
-        #   for j in range(horizon):
-
-        #       if j == horizon - 1:
-        #           terminals = True
-        #           episode_terminals = True
-        #       else:
-        #           terminals = False
-        #           episode_terminals = False
-
-        #       buffer.append(
-        #           observation=np.array(raw_dataset[i]['observations'][j][:11],dtype=np.float32),
-        #           action=np.array(scale_action(env.action_space, raw_dataset[i]['actions'][j]),dtype=np.float32),
-        #           reward=np.array(raw_dataset[i]['rewards'][j],dtype=np.float32),
-        #           terminal=np.array(terminals,dtype=np.float32),
-        #           clip_episode=np.array(episode_terminals,dtype=np.float32),
-        #       )
-
-
-
-        print("demo loaded")
     # start training loop
     observation = env.reset()
     rollout_return = 0.0
-    for total_step in xrange(1, n_steps + 1):
+    for total_step in xrange(0, n_steps + 1):
+        if reset_tmp and total_step % 200000 == 0:
+            # algo.build_with_env(env)
+            print(f"temperature {algo._impl._log_temp.data}")
+            # algo._impl._log_temp._parameter.data = _convert_to_torch(np.array([[2.0]]),device='cuda')
+            # print(f"temperature after reset {algo._impl._log_temp.data}")
         with logger.measure_time("step"):
             # stack observation if necessary
             if is_image:
@@ -289,7 +237,7 @@ def train_single_env(
 
             # sample exploration action
             with logger.measure_time("inference"):
-
+                # import pdb;pdb.set_trace()
                 if total_step < random_steps:
                     # import pdb;pdb.set_trace()
                     # actions sampled from action space are from range specific to the environment
@@ -308,6 +256,12 @@ def train_single_env(
                     # if self.action_noise is not None:
                     #     action = np.clip(action + self.action_noise(), -1, 1)
                     # inferred actions need to be transformed to environment action_space before stepping
+                    # random sample??
+                    # actions = action + np.random.uniform(-0.5,0.5,[1024,action.shape[0]])
+                    # actions = np.clip(actions,-1,1)
+                    # q = algo._impl._q_func(_convert_to_torch(fed_observation,'cuda').repeat([1024,1]),_convert_to_torch(actions,'cuda'),"mean")
+                    # action = actions[q.argmax()]
+
                     unscaled_action = unscale_action(env.action_space, action)
 
             # step environment
@@ -391,8 +345,8 @@ def train_single_env(
             # call callback if given
             if callback:
                 callback(algo, epoch, total_step)
-
-        if epoch > 0 and total_step % n_steps_per_epoch == 0:
+        if total_step % n_steps_per_epoch == 0:
+        # if epoch > 0 and total_step % n_steps_per_epoch == 0:
             # evaluation
             if eval_scorer:
                 logger.add_metric("evaluation", eval_scorer(algo))

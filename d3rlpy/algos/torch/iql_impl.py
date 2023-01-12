@@ -6,6 +6,7 @@ import torch
 from ...gpu import Device
 from ...models.builders import (
     create_non_squashed_normal_policy,
+    create_squashed_normal_policy,
     create_value_function,
 )
 from ...models.encoders import EncoderFactory
@@ -43,6 +44,8 @@ class IQLImpl(DDPGBaseImpl):
         weight_temp: float,
         max_weight: float,
         use_gpu: Optional[Device],
+        squash_policy: bool,
+        utd: int,
         scaler: Optional[Scaler],
         action_scaler: Optional[ActionScaler],
         reward_scaler: Optional[RewardScaler],
@@ -67,6 +70,8 @@ class IQLImpl(DDPGBaseImpl):
             dropout=False,
             layernorm=False,
         )
+        self._squash_policy = squash_policy
+        self._utd = utd
         self._expectile = expectile
         self._weight_temp = weight_temp
         self._max_weight = max_weight
@@ -74,14 +79,22 @@ class IQLImpl(DDPGBaseImpl):
         self._value_func = None
 
     def _build_actor(self) -> None:
-        self._policy = create_non_squashed_normal_policy(
-            self._observation_shape,
-            self._action_size,
-            self._actor_encoder_factory,
-            min_logstd=-5.0,
-            max_logstd=2.0,
-            use_std_parameter=True,
-        )
+        if self._squash_policy:
+            self._policy = create_squashed_normal_policy(
+                self._observation_shape,
+                self._action_size,
+                self._actor_encoder_factory,
+                use_std_parameter=False, # means we do learned state-dependent std
+            )
+        else:
+            self._policy = create_non_squashed_normal_policy(
+                self._observation_shape,
+                self._action_size,
+                self._actor_encoder_factory,
+                min_logstd=-5.0,
+                max_logstd=2.0,
+                use_std_parameter=True,
+            )
 
     def _build_critic(self) -> None:
         super()._build_critic()
@@ -97,6 +110,12 @@ class IQLImpl(DDPGBaseImpl):
         self._critic_optim = self._critic_optim_factory.create(
             q_func_params + v_func_params, lr=self._critic_learning_rate
         )
+        # self.q_optim = self._critic_optim_factory.create(
+        #     q_func_params , lr=self._critic_learning_rate
+        # )
+        # self._value_optim = self._critic_optim_factory.create(
+        #     v_func_params, lr=self._critic_learning_rate
+        # )
 
     def compute_critic_loss(
         self, batch: TorchMiniBatch, q_tpn: torch.Tensor
@@ -152,17 +171,34 @@ class IQLImpl(DDPGBaseImpl):
         assert self._critic_optim is not None
 
         self._critic_optim.zero_grad()
-
         # compute Q-function loss
         q_tpn = self.compute_target(batch)
         q_loss = self.compute_critic_loss(batch, q_tpn)
-
         # compute value function loss
         v_loss = self.compute_value_loss(batch)
-
         loss = q_loss + v_loss
-
         loss.backward()
         self._critic_optim.step()
+
+
+        # assert self.q_optim is not None and self._value_optim is not None
+
+        # # self._critic_optim.zero_grad()
+        # self.q_optim.zero_grad()
+        # self._value_optim.zero_grad()
+        # # compute Q-function loss
+        # q_tpn = self.compute_target(batch)
+        # q_loss = self.compute_critic_loss(batch, q_tpn)
+        # # import pdb;pdb.set_trace()
+        # # compute value function loss
+        # for _ in range (self._utd):
+        #     self._value_optim.zero_grad()
+        #     v_loss = self.compute_value_loss(batch)
+        #     v_loss.backward()
+        #     self._value_optim.step()
+
+        # q_loss.backward()
+        # self.q_optim.step()
+
 
         return q_loss.cpu().detach().numpy(), v_loss.cpu().detach().numpy()

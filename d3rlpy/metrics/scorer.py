@@ -479,7 +479,7 @@ def evaluate_on_environment(
                         action = algo.predict([stacked_observation.eval()])[0]
                     else:
                         action = algo.predict([observation])[0]
-                action = unscale_action(env.action_space, action)
+                # action = unscale_action(env.action_space, action)
                 observation, reward, done, _ = env.step(action)
                 episode_reward += reward
 

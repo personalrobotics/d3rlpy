@@ -126,6 +126,8 @@ class IQL(AlgoBase):
         weight_temp: float = 3.0,
         max_weight: float = 100.0,
         use_gpu: UseGPUArg = False,
+        squash_policy: bool = True, # use sac-style squashing
+        utd: int = 1,
         scaler: ScalerArg = None,
         action_scaler: ActionScalerArg = None,
         reward_scaler: RewardScalerArg = None,
@@ -155,6 +157,8 @@ class IQL(AlgoBase):
         self._weight_temp = weight_temp
         self._max_weight = max_weight
         self._use_gpu = check_use_gpu(use_gpu)
+        self._squash_policy = squash_policy
+        self._utd = utd
         self._impl = impl
 
     def _create_impl(
@@ -177,13 +181,15 @@ class IQL(AlgoBase):
             weight_temp=self._weight_temp,
             max_weight=self._max_weight,
             use_gpu=self._use_gpu,
+            squash_policy=self._squash_policy,
             scaler=self._scaler,
             action_scaler=self._action_scaler,
             reward_scaler=self._reward_scaler,
+            utd = self._utd
         )
         self._impl.build()
 
-    def _update(self, batch: TransitionMiniBatch) -> Dict[str, float]:
+    def _update(self, batch: TransitionMiniBatch, utd=1) -> Dict[str, float]:
         assert self._impl is not None, IMPL_NOT_INITIALIZED_ERROR
 
         metrics = {}

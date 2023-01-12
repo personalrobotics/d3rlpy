@@ -121,6 +121,7 @@ class SACImpl(DDPGBaseImpl):
         assert self._q_func is not None
         action, log_prob = self._policy.sample_with_log_prob(batch.observations)
         entropy = self._log_temp().exp() * log_prob
+        # import pdb;pdb.set_trace()
         q_t = self._q_func(batch.observations, action, "min")
         if demo_batch:
             # import pdb;pdb.set_trace()

@@ -85,7 +85,7 @@ class TorchImplBase(DynamicsImplBase):
     def save_model(self, fname: str) -> None:
         torch.save(get_state_dict(self), fname)
 
-    def load_model(self, fname: str) -> None:
+    def load_model(self, fname: str, aq_only=False) -> None:
         chkpt = torch.load(fname, map_location=map_location(self._device))
         set_state_dict(self, chkpt)
 

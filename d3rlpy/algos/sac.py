@@ -206,6 +206,7 @@ class SAC(AlgoBase):
         if self._temp_learning_rate > 0:
             temp_loss, temp = self._impl.update_temp(batch)
             metrics.update({"temp_loss": temp_loss, "temp": temp})
+        # print('utd',utd)
         if utd > 1:
             for _ in range(utd):
                 critic_loss = self._impl.update_critic(batch)
