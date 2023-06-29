@@ -15,7 +15,7 @@ from .explorers import Explorer
 
 
 class AlgoProtocol(Protocol):
-    def update(self, batch: TransitionMiniBatch) -> Dict[str, float]:
+    def update(self, batch: TransitionMiniBatch,utd=1) -> Dict[str, float]:
         ...
 
     def build_with_env(self, env: gym.Env) -> None:
@@ -117,6 +117,7 @@ def train_single_env(
     show_progress: bool = True,
     tensorboard_dir: Optional[str] = None,
     timelimit_aware: bool = True,
+    utd: int = 1,
     callback: Optional[Callable[[AlgoProtocol, int, int], None]] = None,
 ) -> None:
     """Start training loop of online deep reinforcement learning.
@@ -261,7 +262,7 @@ def train_single_env(
 
                     # update parameters
                     with logger.measure_time("algorithm_update"):
-                        loss = algo.update(batch)
+                        loss = algo.update(batch,utd=utd)
 
                     # record metrics
                     for name, val in loss.items():

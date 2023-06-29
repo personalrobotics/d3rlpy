@@ -735,7 +735,7 @@ class LearnableBase:
             observation_shape = (self._n_frames * n_channels, *image_size)
         return observation_shape
 
-    def update(self, batch: TransitionMiniBatch) -> Dict[str, float]:
+    def update(self, batch: TransitionMiniBatch,utd=1) -> Dict[str, float]:
         """Update parameters with mini-batch of data.
 
         Args:
@@ -745,7 +745,10 @@ class LearnableBase:
             dictionary of metrics.
 
         """
-        loss = self._update(batch)
+        if utd > 1:
+            loss = self._update(batch,utd=utd)
+        else:
+            loss = self._update(batch)
         self._grad_step += 1
         return loss
 

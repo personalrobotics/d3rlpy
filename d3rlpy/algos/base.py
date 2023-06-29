@@ -205,6 +205,7 @@ class AlgoBase(LearnableBase):
         show_progress: bool = True,
         tensorboard_dir: Optional[str] = None,
         timelimit_aware: bool = True,
+        utd: int = 1,
         callback: Optional[Callable[[AlgoProtocol, int, int], None]] = None,
     ) -> None:
         """Start training loop of online deep reinforcement learning.
@@ -269,6 +270,7 @@ class AlgoBase(LearnableBase):
             show_progress=show_progress,
             tensorboard_dir=tensorboard_dir,
             timelimit_aware=timelimit_aware,
+            utd = utd,
             callback=callback,
         )
 

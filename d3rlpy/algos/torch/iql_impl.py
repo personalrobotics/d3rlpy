@@ -7,6 +7,7 @@ from ...gpu import Device
 from ...models.builders import (
     create_non_squashed_normal_policy,
     create_value_function,
+    create_squashed_normal_policy,
 )
 from ...models.encoders import EncoderFactory
 from ...models.optimizers import OptimizerFactory
@@ -64,6 +65,8 @@ class IQLImpl(DDPGBaseImpl):
             scaler=scaler,
             action_scaler=action_scaler,
             reward_scaler=reward_scaler,
+            dropout=0.0,
+            layernorm=False,
         )
         self._expectile = expectile
         self._weight_temp = weight_temp
@@ -72,15 +75,19 @@ class IQLImpl(DDPGBaseImpl):
         self._value_func = None
 
     def _build_actor(self) -> None:
-        self._policy = create_non_squashed_normal_policy(
+        # self._policy = create_non_squashed_normal_policy(
+        #     self._observation_shape,
+        #     self._action_size,
+        #     self._actor_encoder_factory,
+        #     min_logstd=-6.0,
+        #     max_logstd=0.0,
+        #     use_std_parameter=True,
+        # )
+        self._policy = create_squashed_normal_policy(
             self._observation_shape,
             self._action_size,
             self._actor_encoder_factory,
-            min_logstd=-5.0,
-            max_logstd=2.0,
-            use_std_parameter=True,
         )
-
     def _build_critic(self) -> None:
         super()._build_critic()
         self._value_func = create_value_function(

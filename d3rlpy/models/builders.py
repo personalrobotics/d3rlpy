@@ -51,7 +51,10 @@ def create_continuous_q_function(
     encoder_factory: EncoderFactory,
     q_func_factory: QFunctionFactory,
     n_ensembles: int = 1,
+    dropout : float=0.0,
+    layernorm = False,
 ) -> EnsembleContinuousQFunction:
+    # import pdb;pdb.set_trace()
     if q_func_factory.share_encoder:
         encoder = encoder_factory.create_with_action(
             observation_shape, action_size
@@ -63,9 +66,13 @@ def create_continuous_q_function(
     q_funcs = []
     for _ in range(n_ensembles):
         if not q_func_factory.share_encoder:
+            encoder_factory._use_layernorm = layernorm
+            encoder_factory._dropout_rate = dropout
             encoder = encoder_factory.create_with_action(
-                observation_shape, action_size
+                observation_shape, action_size,
             )
+            encoder_factory._use_layernorm = False
+            encoder_factory._dropout_rate = 0.0
         q_funcs.append(q_func_factory.create_continuous(encoder))
     return EnsembleContinuousQFunction(q_funcs)
 

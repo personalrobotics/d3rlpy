@@ -236,29 +236,36 @@ class _VectorEncoder(nn.Module):  # type: ignore
         dropout_rate: Optional[float] = None,
         use_dense: bool = False,
         activation: nn.Module = nn.ReLU(),
+        use_layernorm: bool=False,
     ):
+        # import pdb;pdb.set_trace()
         super().__init__()
         self._observation_shape = observation_shape
 
         if hidden_units is None:
             hidden_units = [256, 256]
 
+        self._use_layernorm  = use_layernorm
         self._use_batch_norm = use_batch_norm
         self._dropout_rate = dropout_rate
         self._feature_size = hidden_units[-1]
         self._activation = activation
         self._use_dense = use_dense
 
+
         in_units = [observation_shape[0]] + list(hidden_units[:-1])
         self._fcs = nn.ModuleList()
         self._bns = nn.ModuleList()
         self._dropouts = nn.ModuleList()
+        self._lns = nn.ModuleList()
         for i, (in_unit, out_unit) in enumerate(zip(in_units, hidden_units)):
             if use_dense and i > 0:
                 in_unit += observation_shape[0]
             self._fcs.append(nn.Linear(in_unit, out_unit))
             if use_batch_norm:
                 self._bns.append(nn.BatchNorm1d(out_unit))
+            if use_layernorm:
+                self._lns.append(nn.LayerNorm(out_unit))
             if dropout_rate is not None:
                 self._dropouts.append(nn.Dropout(dropout_rate))
 
@@ -272,6 +279,9 @@ class _VectorEncoder(nn.Module):  # type: ignore
                 h = self._bns[i](h)
             if self._dropout_rate is not None:
                 h = self._dropouts[i](h)
+
+            # if h.isnan().any():
+            #     import pdb;pdb.set_trace()
         return h
 
     def get_feature_size(self) -> int:
@@ -289,6 +299,8 @@ class _VectorEncoder(nn.Module):  # type: ignore
 class VectorEncoder(_VectorEncoder, Encoder):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         h = self._fc_encode(x)
+        if self._use_layernorm:
+            h = self._lns[-1](h)
         if self._use_batch_norm:
             h = self._bns[-1](h)
         if self._dropout_rate is not None:
@@ -311,6 +323,7 @@ class VectorEncoderWithAction(_VectorEncoder, EncoderWithAction):
         use_dense: bool = False,
         discrete_action: bool = False,
         activation: nn.Module = nn.ReLU(),
+        use_layernorm: bool=False,
     ):
         self._action_size = action_size
         self._discrete_action = discrete_action
@@ -322,6 +335,7 @@ class VectorEncoderWithAction(_VectorEncoder, EncoderWithAction):
             use_dense=use_dense,
             dropout_rate=dropout_rate,
             activation=activation,
+            use_layernorm=use_layernorm,
         )
         self._observation_shape = observation_shape
 
@@ -334,6 +348,8 @@ class VectorEncoderWithAction(_VectorEncoder, EncoderWithAction):
         h = self._fc_encode(x)
         if self._use_batch_norm:
             h = self._bns[-1](h)
+        if self._use_layernorm:
+            h = self._lns[-1](h)
         if self._dropout_rate is not None:
             h = self._dropouts[-1](h)
         return h
