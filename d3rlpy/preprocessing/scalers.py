@@ -249,7 +249,7 @@ class MinMaxScaler(Scaler):
         maximum = torch.tensor(
             self._maximum, dtype=torch.float32, device=x.device
         )
-        return (x - minimum) / (maximum - minimum)
+        return (x - minimum) / (maximum - minimum + 1e-8)
 
     def reverse_transform(self, x: torch.Tensor) -> torch.Tensor:
         assert self._minimum is not None and self._maximum is not None
@@ -259,17 +259,17 @@ class MinMaxScaler(Scaler):
         maximum = torch.tensor(
             self._maximum, dtype=torch.float32, device=x.device
         )
-        return ((maximum - minimum) * x) + minimum
+        return ((maximum - minimum + 1e-8) * x) + minimum
 
     def transform_numpy(self, x: np.ndarray) -> np.ndarray:
         assert self._minimum is not None and self._maximum is not None
         minimum, maximum = self._minimum, self._maximum
-        return (x - minimum) / (maximum - minimum)
+        return (x - minimum) / (maximum - minimum + 1e-8)
 
     def reverse_transform_numpy(self, x: torch.Tensor) -> torch.Tensor:
         assert self._minimum is not None and self._maximum is not None
         minimum, maximum = self._minimum, self._maximum
-        return ((maximum - minimum) * x) + minimum
+        return ((maximum - minimum + 1e-8) * x) + minimum
 
     def get_params(self, deep: bool = False) -> Dict[str, Any]:
         if self._maximum is not None:

@@ -206,7 +206,7 @@ class MinMaxActionScaler(ActionScaler):
             self._maximum, dtype=torch.float32, device=action.device
         )
         # transform action into [-1.0, 1.0]
-        return ((action - minimum) / (maximum - minimum)) * 2.0 - 1.0
+        return ((action - minimum) / (maximum - minimum + 1e-8)) * 2.0 - 1.0
 
     def reverse_transform(self, action: torch.Tensor) -> torch.Tensor:
         assert self._minimum is not None and self._maximum is not None
@@ -217,19 +217,19 @@ class MinMaxActionScaler(ActionScaler):
             self._maximum, dtype=torch.float32, device=action.device
         )
         # transform action from [-1.0, 1.0]
-        return ((maximum - minimum) * ((action + 1.0) / 2.0)) + minimum
+        return ((maximum - minimum + 1e-8) * ((action + 1.0) / 2.0)) + minimum
 
     def transform_numpy(self, action: np.ndarray) -> np.ndarray:
         assert self._minimum is not None and self._maximum is not None
         minimum, maximum = self._minimum, self._maximum
         # transform action into [-1.0, 1.0]
-        return ((action - minimum) / (maximum - minimum)) * 2.0 - 1.0
+        return ((action - minimum) / (maximum - minimum + 1e-8)) * 2.0 - 1.0
 
     def reverse_transform_numpy(self, action: np.ndarray) -> np.ndarray:
         assert self._minimum is not None and self._maximum is not None
         minimum, maximum = self._minimum, self._maximum
         # transform action from [-1.0, 1.0]
-        return ((maximum - minimum) * ((action + 1.0) / 2.0)) + minimum
+        return ((maximum - minimum + 1e-8) * ((action + 1.0) / 2.0)) + minimum
 
     def get_params(self, deep: bool = False) -> Dict[str, Any]:
         if self._minimum is not None:
